@@ -189,7 +189,6 @@ def main() -> int:
         print("ERROR: data still fails validation after cleaning.", file=sys.stderr)
         return 1
 
-    df_clean.to_csv(CLEAN_PATH, index=False)
     print(f"\nWrote {len(df_clean):,} cleaned rows to {CLEAN_PATH}")
 
     df_features = add_features(df_clean)
