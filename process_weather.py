@@ -130,7 +130,6 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["wind_speed", "wind_gust"]:
         if col in df.columns:
             df[col] = df[col].clip(lower=0)
-    df["visibility"]= df["visibility"].fillna(10000).clip(lower=0)
 
     return df
 
@@ -189,6 +188,7 @@ def main() -> int:
         print("ERROR: data still fails validation after cleaning.", file=sys.stderr)
         return 1
 
+    df_clean.to_csv(CLEAN_PATH, index=False)
     print(f"\nWrote {len(df_clean):,} cleaned rows to {CLEAN_PATH}")
 
     df_features = add_features(df_clean)
@@ -200,3 +200,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+  
