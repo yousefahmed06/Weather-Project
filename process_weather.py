@@ -107,6 +107,12 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     df = df.dropna(subset=["forecast_datetime", "city"])
     print(f"Dropped {before - len(df)} rows missing city/forecast_datetime")
 
+    before = len(df)
+    df = df.sort_values("fetch_timestamp").drop_duplicates(
+        subset=["city", "forecast_datetime"], keep="last"
+    )
+    print(f"Dropped {before - len(df)} duplicate (city, forecast_datetime) rows, kept most recent fetch")
+
     numeric_cols = [
         "temp_c", "feels_like_c", "temp_min_c", "temp_max_c", "pressure",
         "humidity", "wind_speed", "wind_gust", "clouds_pct", "pop",
@@ -130,6 +136,7 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["wind_speed", "wind_gust"]:
         if col in df.columns:
             df[col] = df[col].clip(lower=0)
+    df["visibility"]= df["visibility"].fillna(10000).clip(lower=0)
 
     return df
 
@@ -200,4 +207,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-  
