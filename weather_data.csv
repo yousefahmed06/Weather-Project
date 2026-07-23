@@ -1,0 +1,1 @@
+fetch_timestamp,city,country,forecast_datetime,temp_c,feels_like_c,temp_min_c,temp_max_c,pressure,humidity,wind_speed,wind_deg,wind_gust,clouds_pct,visibility,pop,rain_3h_mm,snow_3h_mm,weather_main,weather_description,part_of_day
