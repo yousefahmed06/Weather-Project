@@ -1,0 +1,40 @@
+name: Fetch and process weather data
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # daily at 00:00 UTC — adjust as you like
+  workflow_dispatch:        # adds a "Run workflow" button in the Actions tab
+
+permissions:
+  contents: write            # required so this workflow can push commits back
+
+jobs:
+  update-weather-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Fetch weather data
+        env:
+          OWM_API_KEY: ${{ secrets.OWM_API_KEY }}
+        run: python fetch_weather.py
+
+      - name: Process weather data
+        run: python process_weather.py
+
+      - name: Commit and push updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add weather_data.csv weather_data_clean.csv weather_data_features.csv
+          git diff --quiet --cached || git commit -m "Update weather data [automated]"
+          git push
