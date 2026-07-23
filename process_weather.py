@@ -57,11 +57,19 @@ def load_raw(path: Path) -> pd.DataFrame:
     return df
 
 
-def validate(df: pd.DataFrame) -> dict:
-    """Report-only: never modifies df."""
-    report = {}
+def validate(df: pd.DataFrame, ignore_missing: list[str] | None = None) -> dict:
+    """Report-only: never modifies df.
 
-    report["missing_columns"] = [c for c in EXPECTED_COLUMNS if c not in df.columns]
+    `ignore_missing` lists columns that are expected to be absent on purpose
+    (e.g. dropped by drop_uninformative_columns) so they aren't flagged as
+    a validation failure.
+    """
+    report = {}
+    ignore_missing = set(ignore_missing or [])
+
+    report["missing_columns"] = [
+        c for c in EXPECTED_COLUMNS if c not in df.columns and c not in ignore_missing
+    ]
 
     null_counts = df.isnull().sum()
     report["null_counts"] = null_counts[null_counts > 0].to_dict()
@@ -93,7 +101,31 @@ def print_report(title: str, report: dict) -> None:
         print(f"  {k}: {v}")
 
 
-def clean(df: pd.DataFrame) -> pd.DataFrame:
+def drop_uninformative_columns(df: pd.DataFrame, keep: list[str]) -> tuple[pd.DataFrame, list[str]]:
+    """
+    Dynamic filtering: drop columns that carry no signal (constant value or
+    entirely null) instead of hardcoding which ones to remove. Columns in
+    `keep` are never dropped, even if they happen to be constant/null in a
+    given run (e.g. a single-city fetch where city is constant).
+
+    Returns (df, dropped_columns) so callers can tell validate() these
+    absences are intentional, not a sign of upstream schema drift.
+    """
+    df = df.copy()
+
+    useless_cols = [
+        col for col in df.columns
+        if col not in keep and df[col].nunique(dropna=True) <= 1
+    ]
+
+    if useless_cols:
+        print(f"Dropping uninformative columns (constant or all-null): {useless_cols}")
+        df = df.drop(columns=useless_cols)
+
+    return df, useless_cols
+
+
+def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     df = df.copy()
 
     df["forecast_datetime"] = pd.to_datetime(df["forecast_datetime"], errors="coerce")
@@ -138,7 +170,12 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = df[col].clip(lower=0)
     df["visibility"]= df["visibility"].fillna(10000).clip(lower=0)
 
-    return df
+    df, dropped_cols = drop_uninformative_columns(
+        df,
+        keep=["fetch_timestamp", "city", "country", "forecast_datetime"],
+    )
+
+    return df, dropped_cols
 
 
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -149,21 +186,29 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     df["is_weekend"] = df["forecast_datetime"].dt.weekday >= 5
     df["month"] = df["forecast_datetime"].dt.month
 
-    df["temp_range_c"] = df["temp_max_c"] - df["temp_min_c"]
-    df["feels_like_delta_c"] = df["feels_like_c"] - df["temp_c"]
-    df["is_raining"] = df["rain_3h_mm"] > 0
-    df["is_snowing"] = df["snow_3h_mm"] > 0
-    df["is_daytime"] = df["part_of_day"] == "d"
-
-    bins = [-np.inf, 0, 10, 20, 30, np.inf]
-    labels = ["freezing", "cold", "mild", "warm", "hot"]
-    df["temp_category"] = pd.cut(df["temp_c"], bins=bins, labels=labels)
+    if "temp_max_c" in df.columns and "temp_min_c" in df.columns:
+        df["temp_range_c"] = df["temp_max_c"] - df["temp_min_c"]
+    if "feels_like_c" in df.columns and "temp_c" in df.columns:
+        df["feels_like_delta_c"] = df["feels_like_c"] - df["temp_c"]
+    # rain_3h_mm / snow_3h_mm may have been dropped by drop_uninformative_columns
+    # if they were constant (e.g. all zero - no rain/snow in this batch). That
+    # itself means "never raining/snowing", so default accordingly instead of
+    # erroring out.
+    df["is_raining"] = df["rain_3h_mm"] > 0 if "rain_3h_mm" in df.columns else False
+    df["is_snowing"] = df["snow_3h_mm"] > 0 if "snow_3h_mm" in df.columns else False
+    df["is_daytime"] = (df["part_of_day"] == "d") if "part_of_day" in df.columns else np.nan
 
     df = df.sort_values(["city", "forecast_datetime"])
-    df["temp_rolling_avg_9h"] = (
-        df.groupby("city")["temp_c"]
-          .transform(lambda s: s.rolling(window=3, min_periods=1).mean())
-    )
+
+    if "temp_c" in df.columns:
+        bins = [-np.inf, 0, 10, 20, 30, np.inf]
+        labels = ["freezing", "cold", "mild", "warm", "hot"]
+        df["temp_category"] = pd.cut(df["temp_c"], bins=bins, labels=labels)
+
+        df["temp_rolling_avg_9h"] = (
+            df.groupby("city")["temp_c"]
+              .transform(lambda s: s.rolling(window=3, min_periods=1).mean())
+        )
 
     return df
 
@@ -180,13 +225,13 @@ def main() -> int:
     if not pre_report["passed"]:
         print("\nIssues found above will be auto-fixed during cleaning.")
 
-    df_clean = clean(df_raw)
+    df_clean, dropped_cols = clean(df_raw)
 
     if df_clean.empty:
         print("ERROR: no rows survived cleaning.", file=sys.stderr)
         return 1
 
-    post_report = validate(df_clean)
+    post_report = validate(df_clean, ignore_missing=dropped_cols)
     print_report("Validation (post-clean)", post_report)
     if not post_report["passed"]:
         # Cleaning should have resolved everything by this point. If it
