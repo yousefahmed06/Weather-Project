@@ -68,6 +68,8 @@ FIELDNAMES = [
     "fetch_timestamp",  # when this run pulled the data
     "city",
     "country",
+    "lat",   # latitude of the city, from OpenWeatherMap - lets mapping tools
+    "lon",   # (e.g. Power BI) plot exact points instead of geocoding city names
     "forecast_datetime",  # the date/time this row's forecast applies to
     "temp_c",
     "feels_like_c",
@@ -109,7 +111,11 @@ def fetch_city_forecast(city: str) -> list[dict]:
     data = response.json()
 
     fetch_time = datetime.now(timezone.utc).isoformat()
-    country = data.get("city", {}).get("country", "")
+    city_info = data.get("city", {})
+    country = city_info.get("country", "")
+    coord = city_info.get("coord", {})
+    lat = coord.get("lat", "")
+    lon = coord.get("lon", "")
 
     rows = []
     for entry in data["list"]:
@@ -121,6 +127,8 @@ def fetch_city_forecast(city: str) -> list[dict]:
             "fetch_timestamp": fetch_time,
             "city": city,
             "country": country,
+            "lat": lat,
+            "lon": lon,
             "forecast_datetime": entry["dt_txt"],
             "temp_c": main["temp"],
             "feels_like_c": main["feels_like"],
