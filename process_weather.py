@@ -130,6 +130,7 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     for col in ["wind_speed", "wind_gust"]:
         if col in df.columns:
             df[col] = df[col].clip(lower=0)
+    df["visibility"]= df["visibility"].fillna(10000).clip(lower=0)
 
     return df
 
