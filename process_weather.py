@@ -32,7 +32,7 @@ CLEAN_PATH = Path("weather_data_clean.csv")
 FEATURES_PATH = Path("weather_data_features.csv")
 
 EXPECTED_COLUMNS = [
-    "fetch_timestamp", "city", "country", "forecast_datetime",
+    "fetch_timestamp", "city", "country", "lat", "lon", "forecast_datetime",
     "temp_c", "feels_like_c", "temp_min_c", "temp_max_c",
     "pressure", "humidity", "wind_speed", "wind_deg", "wind_gust",
     "clouds_pct", "visibility", "pop", "rain_3h_mm", "snow_3h_mm",
@@ -43,6 +43,8 @@ RANGE_CHECKS = {
     "humidity":   (0, 100),
     "clouds_pct": (0, 100),
     "pop":        (0, 1),
+    "lat":        (-90, 90),
+    "lon":        (-180, 180),
     "wind_speed": (0, None),
     "wind_gust":  (0, None),
     "pressure":   (800, 1100),  # generous bounds for sea-level-ish hPa readings
@@ -148,7 +150,7 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     numeric_cols = [
         "temp_c", "feels_like_c", "temp_min_c", "temp_max_c", "pressure",
         "humidity", "wind_speed", "wind_gust", "clouds_pct", "pop",
-        "rain_3h_mm", "snow_3h_mm",
+        "rain_3h_mm", "snow_3h_mm", "lat", "lon",
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -172,7 +174,7 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 
     df, dropped_cols = drop_uninformative_columns(
         df,
-        keep=["fetch_timestamp", "city", "country", "forecast_datetime"],
+        keep=["fetch_timestamp", "city", "country", "forecast_datetime", "lat", "lon"],
     )
 
     return df, dropped_cols
