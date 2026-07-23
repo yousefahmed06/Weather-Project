@@ -145,6 +145,26 @@ def fetch_city_forecast(city: str) -> list[dict]:
 
 def main():
     file_exists = os.path.isfile(CSV_FILE)
+    existing_keys = set()
+    if file_exists:
+        try:
+            existing = pd.read_csv(
+                CSV_FILE,
+                  usecols=["city", "observation_datetime"]
+            )
+
+            existing_keys = set(
+                zip(
+                    existing["city"],
+                    existing["observation_datetime"]
+                )
+            )
+
+            print(f"Loaded {len(existing_keys)} existing records.")
+
+        except Exception:
+            pass
+    
 
     with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
@@ -154,10 +174,15 @@ def main():
         total = 0
         for i, city in enumerate(CITIES):
             try:
-                rows = fetch_city_forecast(city)
-                writer.writerows(rows)
-                total += len(rows)
-                print(f"Fetched {len(rows)} rows for {city}")
+                row = fetch_city_weather(city, cc)
+                key = (row["city"], row["observation_datetime"])
+                if key not in existing_keys:
+                    writer.writerow(row)
+                    existing_keys.add(key)
+                    total += 1
+                    print( f"[{i}/{len(cities)}] " f"{city}, {cc} ✓ Added" )
+                else:
+                    print( f"[{i}/{len(cities)}] " f"{city}, {cc} ✓ Duplicate skipped")
             except Exception as e:
                 # Don't let one failed city kill the whole run
                 print(f"Failed for {city}: {e}")
